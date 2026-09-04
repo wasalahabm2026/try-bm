@@ -69,6 +69,45 @@
         width: 100% !important;
         min-height: 42px;
       }
+
+      /* شاشة انتظار تحميل المطاعم + مؤقت إعادة التحميل اليدوي */
+      .restaurants-loading-recovery {
+        animation: restaurantsLoadingFadeIn 0.25s ease-out;
+      }
+
+      @keyframes restaurantsLoadingFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .restaurants-loading-spinner {
+        width: 34px;
+        height: 34px;
+        border: 4px solid #e5e7eb;
+        border-top-color: #ffb800;
+        border-radius: 50%;
+        animation: restaurantsLoadingSpin 0.8s linear infinite;
+        margin: 0 auto;
+      }
+
+      @keyframes restaurantsLoadingSpin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .restaurants-loading-timer {
+        font-size: 3.25rem;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+      }
     </style>
     <script>
       tailwind.config = {
@@ -201,9 +240,39 @@
           <h2 class="font-bold text-lg text-brand-black">مطاعم بني مزار</h2>
           <div id="restaurants-list-container" class="space-y-3">
             <div
-              class="text-center py-6 text-gray-400 text-xs bg-white rounded-2xl p-4"
+              id="restaurants-loading-recovery"
+              class="restaurants-loading-recovery text-center py-7 text-gray-400 text-xs bg-white rounded-2xl p-5 border border-gray-100 shadow-sm"
             >
-              جاري تحميل المطاعم...
+              <div class="restaurants-loading-spinner mb-4"></div>
+              <div class="font-extrabold text-sm text-brand-black">
+                جاري تحميل المطاعم...
+              </div>
+              <div class="text-[11px] mt-1 text-gray-400">
+                وصّلها BM بتجهزلك الدنيا 😉
+              </div>
+
+              <button
+                id="restaurants-refresh-btn"
+                type="button"
+                onclick="refreshRestaurantsAfterLoadingTimeout()"
+                disabled
+                class="mt-5 w-full bg-brand-black text-brand-yellow font-extrabold py-3 px-4 rounded-2xl text-sm shadow-md opacity-50 cursor-not-allowed transition"
+              >
+                اضغط هنا في حال عدم ظهور المطاعم
+              </button>
+
+              <div class="mt-4 text-gray-400 text-[11px] font-semibold">
+                يمكنك إعادة التحميل إذا لم تظهر المطاعم بعد انتهاء المؤقت
+              </div>
+              <div
+                id="restaurants-loading-timer"
+                class="restaurants-loading-timer mt-2 text-brand-black"
+              >
+                30
+              </div>
+              <div class="text-[10px] text-gray-400 mt-1">
+                ثانية
+              </div>
             </div>
           </div>
 
@@ -1986,6 +2055,79 @@
       let restaurantRetryTimer = null;
       let restaurantRetryDelay = 1000;
 
+      // مؤقت انتظار ظهور المطاعم.
+      // يبدأ عند فتح التطبيق، ويختفي فور وصول مطعم واحد على الأقل.
+      // عند وصوله إلى صفر يصبح زر إعادة التحميل متاحاً للمستخدم.
+      let restaurantsLoadingCountdown = 30;
+      let restaurantsLoadingCountdownInterval = null;
+
+      function updateRestaurantsLoadingRecoveryUI() {
+        const timerEl = document.getElementById("restaurants-loading-timer");
+        const refreshBtn = document.getElementById("restaurants-refresh-btn");
+
+        if (timerEl) {
+          timerEl.textContent = Math.max(0, restaurantsLoadingCountdown);
+        }
+
+        if (refreshBtn) {
+          const ready = restaurantsLoadingCountdown <= 0;
+          refreshBtn.disabled = !ready;
+
+          refreshBtn.classList.toggle("opacity-50", !ready);
+          refreshBtn.classList.toggle("cursor-not-allowed", !ready);
+          refreshBtn.classList.toggle("cursor-pointer", ready);
+          refreshBtn.classList.toggle("shadow-md", !ready);
+          refreshBtn.classList.toggle("shadow-lg", ready);
+        }
+      }
+
+      function stopRestaurantsLoadingRecoveryTimer() {
+        if (restaurantsLoadingCountdownInterval) {
+          clearInterval(restaurantsLoadingCountdownInterval);
+          restaurantsLoadingCountdownInterval = null;
+        }
+      }
+
+      function startRestaurantsLoadingRecoveryTimer() {
+        stopRestaurantsLoadingRecoveryTimer();
+
+        restaurantsLoadingCountdown = 30;
+        updateRestaurantsLoadingRecoveryUI();
+
+        restaurantsLoadingCountdownInterval = setInterval(() => {
+          restaurantsLoadingCountdown -= 1;
+
+          if (restaurantsLoadingCountdown <= 0) {
+            restaurantsLoadingCountdown = 0;
+            stopRestaurantsLoadingRecoveryTimer();
+          }
+
+          updateRestaurantsLoadingRecoveryUI();
+        }, 1000);
+      }
+
+      function stopRestaurantsLoadingRecovery() {
+        stopRestaurantsLoadingRecoveryTimer();
+
+        const loadingEl = document.getElementById(
+          "restaurants-loading-recovery"
+        );
+        if (loadingEl) {
+          loadingEl.remove();
+        }
+      }
+
+      window.refreshRestaurantsAfterLoadingTimeout = function () {
+        if (restaurantsLoadingCountdown > 0) return;
+
+        stopRestaurantsLoadingRecoveryTimer();
+
+        // Reload عادي فقط، بدون مسح localStorage أو بيانات العميل.
+        // الـAuto Reload الموجود أعلى الملف لن يدخل في Loop لأن sessionStorage
+        // يحتفظ بعلامة الـReload السابقة أثناء جلسة التطبيق.
+        window.location.reload();
+      };
+
       function subscribeRestaurantsListener() {
         if (restaurantRetryTimer) {
           clearTimeout(restaurantRetryTimer);
@@ -2014,6 +2156,12 @@
                 __restaurantSnapshotIndex: restaurantSnapshotIndex++,
               });
             });
+
+            // بمجرد وصول مطعم واحد على الأقل، نخفي شاشة الانتظار والمؤقت.
+            if (window.restaurantsData.length > 0) {
+              stopRestaurantsLoadingRecovery();
+            }
+
             renderRestaurantsList();
             populateMerchantDropdown();
 
@@ -2075,6 +2223,7 @@
       }
 
       window.initApp = function () {
+        startRestaurantsLoadingRecoveryTimer();
         subscribeRestaurantsListener();
 
         onSnapshot(window.ordersRef, (snapshot) => {
@@ -2112,13 +2261,46 @@
         if (!container) return;
 
         if (window.restaurantsData.length === 0) {
-          // لا تعرض رسالة "لا توجد مطاعم" قبل وصول أول Snapshot فعلي من Firebase.
-          if (!window.restaurantsInitialSnapshotReceived) {
-            container.innerHTML = `<div class="text-center py-6 text-gray-400 text-xs bg-white rounded-2xl p-4">جاري تحميل المطاعم...</div>`;
-            return;
-          }
+          // طالما لم تظهر أي مطاعم، نستمر في عرض شاشة التحميل + المؤقت.
+          // هذا يسمح للعميل باستخدام إعادة التحميل اليدوية بعد 30 ثانية.
+          container.innerHTML = `
+            <div
+              id="restaurants-loading-recovery"
+              class="restaurants-loading-recovery text-center py-7 text-gray-400 text-xs bg-white rounded-2xl p-5 border border-gray-100 shadow-sm"
+            >
+              <div class="restaurants-loading-spinner mb-4"></div>
+              <div class="font-extrabold text-sm text-brand-black">
+                جاري تحميل المطاعم...
+              </div>
+              <div class="text-[11px] mt-1 text-gray-400">
+                وصّلها BM بتجهزلك الدنيا 😉
+              </div>
 
-          container.innerHTML = `<div class="text-center py-6 text-gray-400 text-xs bg-white rounded-2xl p-4">لا توجد مطاعم متاحة حالياً.</div>`;
+              <button
+                id="restaurants-refresh-btn"
+                type="button"
+                onclick="refreshRestaurantsAfterLoadingTimeout()"
+                disabled
+                class="mt-5 w-full bg-brand-black text-brand-yellow font-extrabold py-3 px-4 rounded-2xl text-sm shadow-md opacity-50 cursor-not-allowed transition"
+              >
+                اضغط هنا في حال عدم ظهور المطاعم
+              </button>
+
+              <div class="mt-4 text-gray-400 text-[11px] font-semibold">
+                يمكنك إعادة التحميل إذا لم تظهر المطاعم بعد انتهاء المؤقت
+              </div>
+              <div
+                id="restaurants-loading-timer"
+                class="restaurants-loading-timer mt-2 text-brand-black"
+              >
+                ${Math.max(0, restaurantsLoadingCountdown)}
+              </div>
+              <div class="text-[10px] text-gray-400 mt-1">
+                ثانية
+              </div>
+            </div>
+          `;
+          updateRestaurantsLoadingRecoveryUI();
           return;
         }
 
