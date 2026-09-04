@@ -1994,9 +1994,16 @@
 
         onSnapshot(
           window.colRef,
+          { includeMetadataChanges: true },
           (snapshot) => {
-            window.restaurantsInitialSnapshotReceived = true;
-            restaurantRetryDelay = 1000;
+            // لا نعتبر الـ snapshot القادم من الكاش تحميلًا نهائيًا؛
+            // لأن الكاش قد يكون فارغًا لحظيًا بينما بيانات السيرفر موجودة.
+            const isFromCache = snapshot.metadata?.fromCache === true;
+
+            if (!isFromCache) {
+              window.restaurantsInitialSnapshotReceived = true;
+              restaurantRetryDelay = 1000;
+            }
 
             window.restaurantsData = [];
             let restaurantSnapshotIndex = 0;
