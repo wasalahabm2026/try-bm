@@ -69,45 +69,6 @@
         width: 100% !important;
         min-height: 42px;
       }
-
-      /* شاشة انتظار تحميل المطاعم + مؤقت إعادة التحميل اليدوي */
-      .restaurants-loading-recovery {
-        animation: restaurantsLoadingFadeIn 0.25s ease-out;
-      }
-
-      @keyframes restaurantsLoadingFadeIn {
-        from {
-          opacity: 0;
-          transform: translateY(4px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      .restaurants-loading-spinner {
-        width: 34px;
-        height: 34px;
-        border: 4px solid #e5e7eb;
-        border-top-color: #ffb800;
-        border-radius: 50%;
-        animation: restaurantsLoadingSpin 0.8s linear infinite;
-        margin: 0 auto;
-      }
-
-      @keyframes restaurantsLoadingSpin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      .restaurants-loading-timer {
-        font-size: 3.25rem;
-        line-height: 1;
-        font-weight: 800;
-        letter-spacing: -0.04em;
-      }
     </style>
     <script>
       tailwind.config = {
@@ -240,39 +201,9 @@
           <h2 class="font-bold text-lg text-brand-black">مطاعم بني مزار</h2>
           <div id="restaurants-list-container" class="space-y-3">
             <div
-              id="restaurants-loading-recovery"
-              class="restaurants-loading-recovery text-center py-7 text-gray-400 text-xs bg-white rounded-2xl p-5 border border-gray-100 shadow-sm"
+              class="text-center py-6 text-gray-400 text-xs bg-white rounded-2xl p-4"
             >
-              <div class="restaurants-loading-spinner mb-4"></div>
-              <div class="font-extrabold text-sm text-brand-black">
-                جاري تحميل المطاعم...
-              </div>
-              <div class="text-[11px] mt-1 text-gray-400">
-                وصّلها BM بتجهزلك الدنيا 😉
-              </div>
-
-              <button
-                id="restaurants-refresh-btn"
-                type="button"
-                onclick="refreshRestaurantsAfterLoadingTimeout()"
-                disabled
-                class="mt-5 w-full bg-brand-black text-brand-yellow font-extrabold py-3 px-4 rounded-2xl text-sm shadow-md opacity-50 cursor-not-allowed transition"
-              >
-                اضغط هنا في حال عدم ظهور المطاعم
-              </button>
-
-              <div class="mt-4 text-gray-400 text-[11px] font-semibold">
-                يمكنك إعادة التحميل إذا لم تظهر المطاعم بعد انتهاء المؤقت
-              </div>
-              <div
-                id="restaurants-loading-timer"
-                class="restaurants-loading-timer mt-2 text-brand-black"
-              >
-                30
-              </div>
-              <div class="text-[10px] text-gray-400 mt-1">
-                ثانية
-              </div>
+              جاري تحميل المطاعم...
             </div>
           </div>
 
@@ -1861,132 +1792,251 @@
         doc,
         updateDoc,
         deleteDoc,
-        setDoc,
-        getDoc,
       } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-      // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+      // Firebase الجديد مخصص للأوردرات فقط.
       const firebaseConfig = {
-        apiKey: "AIzaSyCHPSGma80M-GNX6PAJYqcbhu36806cUqk",
-        authDomain: "wasallha-key.firebaseapp.com",
-        databaseURL: "https://wasallha-key-default-rtdb.firebaseio.com",
-        projectId: "wasallha-key",
-        storageBucket: "wasallha-key.firebasestorage.app",
-        messagingSenderId: "21964899437",
-        appId: "1:21964899437:web:6173f96c86bd9d939e2b64",
-        measurementId: "G-LFM7N1YN5D",
+        apiKey: "AIzaSyA_VJBfvfTBdjt3lkCfl_wZA10jMIIbSVc",
+        authDomain: "wasallaha-orders.firebaseapp.com",
+        projectId: "wasallaha-orders",
+        storageBucket: "wasallaha-orders.firebasestorage.app",
+        messagingSenderId: "875630202473",
+        appId: "1:875630202473:web:58b413ab40e2d276b4dcf8",
+        measurementId: "G-LPEKNPWYSJ",
       };
 
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
 
       window.db = db;
-      window.colRef = collection(db, "restaurants");
+      // المرجع الوحيد في Firebase: orders
       window.ordersRef = collection(db, "orders");
-      window.reviewsRef = collection(db, "reviews");
-      window.settingsDocRef = doc(db, "settings", "app_status");
 
-      // Global App Status listener
-      onSnapshot(window.settingsDocRef, (docSnap) => {
+      // بيانات التطبيق المحلية. لا يتم تحميل المطاعم/الأقسام/الأكلات من Firebase.
+      const LOCAL_RESTAURANTS_KEY = "waslha_bm_restaurants_data";
+      const LOCAL_REVIEWS_KEY = "waslha_bm_reviews";
+      const LOCAL_GLOBAL_STATUS_KEY = "waslha_bm_global_status";
+      const LOCAL_MERCHANT_CREDENTIALS_KEY = "waslha_bm_merchant_credentials";
+
+      const defaultRestaurantImage =
+        "assets/restaurants/alsharqawy.jpg";
+
+      window.restaurantsData = [
+        {
+          id: "alsharqawy",
+          name: "الشرقاوي",
+          image: defaultRestaurantImage,
+          isClosed: false,
+          displayOrder: 1,
+          createdAt: Date.now(),
+          categories: [
+            {
+              id: "alsharqawy-main",
+              name: "المنيو",
+              foods: [
+                {
+                  id: "kabda-radda",
+                  name: "ساندوتش كبدة بالردة",
+                  description: "",
+                  price: 20,
+                  image: "assets/foods/alsharqawy/kabda-radda.jpg",
+                  options: [
+                    { label: "وسط", price: 20 },
+                    { label: "كبير", price: 25 },
+                  ],
+                  displayOrder: 1,
+                  createdAt: Date.now(),
+                },
+                {
+                  id: "mok",
+                  name: "ساندوتش مخ",
+                  description: "حدد اختيارك ثم أضف الكمية للسلة.",
+                  price: 40,
+                  image: "assets/foods/alsharqawy/mok.jpg",
+                  options: [
+                    { label: "وسط", price: 40 },
+                    { label: "كبير", price: 50 },
+                  ],
+                  displayOrder: 2,
+                  createdAt: Date.now(),
+                },
+                {
+                  id: "mixed-kabda-mok",
+                  name: "ساندوتش مشكل كبدة ومخ",
+                  description: "",
+                  price: 35,
+                  image: "assets/foods/alsharqawy/mixed-kabda-mok.jpg",
+                  options: [
+                    { label: "وسط", price: 35 },
+                    { label: "كبير", price: 45 },
+                  ],
+                  displayOrder: 3,
+                  createdAt: Date.now(),
+                },
+                {
+                  id: "small-shrimp-sandwich",
+                  name: "ساندوتش جمبري صغير",
+                  description: "",
+                  image: "assets/foods/alsharqawy/small-shrimp.jpg",
+                  options: [
+                    { label: "وسط", price: 25 },
+                    { label: "كبير", price: 30 },
+                  ],
+                  price: 25,
+                  displayOrder: 4,
+                  createdAt: Date.now(),
+                },
+                {
+                  id: "medium-shrimp-sandwich",
+                  name: "ساندوتش جمبري وسط",
+                  description: "",
+                  image: "assets/foods/alsharqawy/medium-shrimp.jpg",
+                  options: [
+                    { label: "وسط", price: 50 },
+                    { label: "كبير", price: 60 },
+                  ],
+                  price: 50,
+                  displayOrder: 5,
+                  createdAt: Date.now(),
+                },
+                {
+                  id: "fish-fillet-sandwich",
+                  name: "ساندوتش سمك فيليه",
+                  description: "",
+                  image: "assets/foods/alsharqawy/fish-fillet.jpg",
+                  options: [
+                    { label: "وسط", price: 25 },
+                    { label: "كبير", price: 35 },
+                  ],
+                  price: 25,
+                  displayOrder: 6,
+                  createdAt: Date.now(),
+                },
+              ],
+            },
+          ],
+          menu: [],
+        },
+      ];
+
+      // إبقاء structure القديم (menu) متوافقاً مع الواجهة الحالية.
+      window.restaurantsData[0].menu =
+        window.restaurantsData[0].categories.flatMap((category) => category.foods);
+
+      function cloneRestaurantsData(data) {
+        return JSON.parse(JSON.stringify(data));
+      }
+
+      function saveRestaurantsDataLocally() {
+        try {
+          localStorage.setItem(
+            LOCAL_RESTAURANTS_KEY,
+            JSON.stringify(window.restaurantsData)
+          );
+        } catch (err) {
+          console.warn("Local restaurant data save skipped:", err);
+        }
+      }
+
+      function loadRestaurantsDataLocally() {
+        try {
+          const saved = localStorage.getItem(LOCAL_RESTAURANTS_KEY);
+          if (!saved) return;
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length) {
+            window.restaurantsData = parsed;
+          }
+        } catch (err) {
+          console.warn("Local restaurant data restore skipped:", err);
+        }
+      }
+
+      function syncRestaurantCategories(rest) {
+        if (!rest) return;
+        if (!Array.isArray(rest.categories)) rest.categories = [];
+        if (rest.categories.length === 0) {
+          rest.categories = [
+            { id: `${rest.id}-main`, name: "المنيو", foods: rest.menu || [] },
+          ];
+        } else {
+          rest.categories[0].foods = rest.menu || [];
+        }
+      }
+
+      function setGlobalStatusLocally(status) {
+        try {
+          localStorage.setItem(LOCAL_GLOBAL_STATUS_KEY, JSON.stringify(status));
+        } catch (_) {}
+      }
+
+      function getGlobalStatusLocally() {
+        try {
+          const saved = localStorage.getItem(LOCAL_GLOBAL_STATUS_KEY);
+          return saved ? JSON.parse(saved) : { isClosed: false };
+        } catch (_) {
+          return { isClosed: false };
+        }
+      }
+
+      function applyGlobalStatus(status) {
         const closedScreen = document.getElementById("global-closed-screen");
-        const statusIndicator = document.getElementById(
-          "global-status-indicator"
-        );
+        const statusIndicator = document.getElementById("global-status-indicator");
         const btnOpen = document.getElementById("btn-open-app");
         const btnClose = document.getElementById("btn-close-app");
+        const isClosed = status?.isClosed === true;
 
-        let isClosed = docSnap.exists() && docSnap.data().isClosed === true;
+        if (closedScreen) closedScreen.classList.toggle("hidden", !isClosed);
 
-        if (isClosed) {
-          closedScreen.classList.remove("hidden");
+        const title = document.getElementById("global-closed-title");
+        const message = document.getElementById("global-closed-message");
+        if (title && status?.closeScreenTitle) title.textContent = status.closeScreenTitle;
+        if (message && status?.closeScreenMessage) message.textContent = status.closeScreenMessage;
 
-          const closeScreenTitle = docSnap.data()?.closeScreenTitle;
-          const closeScreenMessage = docSnap.data()?.closeScreenMessage;
-          const closedTitle = document.getElementById("global-closed-title");
-          const closedMessage = document.getElementById(
-            "global-closed-message"
-          );
-
-          if (closedTitle && closeScreenTitle !== undefined) {
-            closedTitle.textContent = closeScreenTitle;
-          }
-          if (closedMessage && closeScreenMessage !== undefined) {
-            closedMessage.textContent = closeScreenMessage;
-          }
-
-          if (statusIndicator) {
-            statusIndicator.textContent = "التطبيق مغلق (غير متاحين)";
-            statusIndicator.className =
-              "text-xs px-2.5 py-1 rounded-lg font-bold bg-red-100 text-red-700";
-          }
-          if (btnOpen && btnClose) {
-            btnOpen.className =
-              "flex-1 bg-gray-200 text-gray-700 font-bold py-2 rounded-xl text-xs";
-            btnClose.className =
-              "flex-1 bg-red-600 text-white font-bold py-2 rounded-xl text-xs shadow";
-          }
-        } else {
-          closedScreen.classList.add("hidden");
-          if (statusIndicator) {
-            statusIndicator.textContent = "يعمل طبيعي";
-            statusIndicator.className =
-              "text-xs px-2.5 py-1 rounded-lg font-bold bg-green-100 text-green-700";
-          }
-          if (btnOpen && btnClose) {
-            btnOpen.className =
-              "flex-1 bg-green-600 text-white font-bold py-2 rounded-xl text-xs shadow";
-            btnClose.className =
-              "flex-1 bg-gray-200 text-gray-700 font-bold py-2 rounded-xl text-xs";
-          }
+        if (statusIndicator) {
+          statusIndicator.textContent = isClosed ? "التطبيق مغلق (غير متاحين)" : "يعمل طبيعي";
+          statusIndicator.className = isClosed
+            ? "text-xs px-2.5 py-1 rounded-lg font-bold bg-red-100 text-red-700"
+            : "text-xs px-2.5 py-1 rounded-lg font-bold bg-green-100 text-green-700";
         }
-      });
+        if (btnOpen && btnClose) {
+          btnOpen.className = isClosed
+            ? "flex-1 bg-gray-200 text-gray-700 font-bold py-2 rounded-xl text-xs"
+            : "flex-1 bg-green-600 text-white font-bold py-2 rounded-xl text-xs shadow";
+          btnClose.className = isClosed
+            ? "flex-1 bg-red-600 text-white font-bold py-2 rounded-xl text-xs shadow"
+            : "flex-1 bg-gray-200 text-gray-700 font-bold py-2 rounded-xl text-xs";
+        }
+      }
+
+      applyGlobalStatus(getGlobalStatusLocally());
 
       window.openGlobalCloseSettingsModal = function () {
         const modal = document.getElementById("global-close-settings-modal");
         const titleInput = document.getElementById("global-close-title-input");
-        const messageInput = document.getElementById(
-          "global-close-message-input"
-        );
-
+        const messageInput = document.getElementById("global-close-message-input");
         if (titleInput) titleInput.value = "";
         if (messageInput) messageInput.value = "";
-
         if (modal) modal.classList.remove("hidden");
         if (window.lucide) lucide.createIcons();
       };
 
       window.cancelGlobalAppClose = function () {
-        const modal = document.getElementById("global-close-settings-modal");
-        if (modal) modal.classList.add("hidden");
+        document.getElementById("global-close-settings-modal")?.classList.add("hidden");
       };
 
       window.confirmGlobalAppClose = async function () {
         const titleInput = document.getElementById("global-close-title-input");
-        const messageInput = document.getElementById(
-          "global-close-message-input"
-        );
+        const messageInput = document.getElementById("global-close-message-input");
         const title = titleInput ? titleInput.value.trim() : "";
         const message = messageInput ? messageInput.value.trim() : "";
-
-        try {
-          await setDoc(
-            window.settingsDocRef,
-            {
-              isClosed: true,
-              closeScreenTitle: title,
-              closeScreenMessage: message,
-            },
-            { merge: true }
-          );
-
-          const modal = document.getElementById("global-close-settings-modal");
-          if (modal) modal.classList.add("hidden");
-
-          alert("تم إغلاق التطبيق بنجاح.");
-        } catch (err) {
-          console.error(err);
-          alert("حدث خطأ أثناء تحديث حالة التطبيق.");
-        }
+        setGlobalStatusLocally({
+          isClosed: true,
+          closeScreenTitle: title,
+          closeScreenMessage: message,
+        });
+        applyGlobalStatus(getGlobalStatusLocally());
+        document.getElementById("global-close-settings-modal")?.classList.add("hidden");
+        alert("تم إغلاق التطبيق بنجاح.");
       };
 
       window.updateGlobalAppStatus = async function (closeState) {
@@ -1994,21 +2044,13 @@
           openGlobalCloseSettingsModal();
           return;
         }
-
-        try {
-          await setDoc(
-            window.settingsDocRef,
-            { isClosed: false },
-            { merge: true }
-          );
-          alert("تم فتح التطبيق للعامة بنجاح.");
-        } catch (err) {
-          console.error(err);
-          alert("حدث خطأ أثناء تحديث حالة التطبيق.");
-        }
+        setGlobalStatusLocally({ isClosed: false });
+        applyGlobalStatus(getGlobalStatusLocally());
+        alert("تم فتح التطبيق للعامة بنجاح.");
       };
 
-      window.restaurantsData = [];
+      // مهم: لا نمسح البيانات المحلية الافتراضية هنا.
+      // restaurantsData تم تعريفها بالأعلى وتحتوي على مطعم الشرقاوي والمنيو.
       window.currentRestaurantId = null;
       window.currentMerchantRestaurantId = null;
       window.merchantReviewsVisible = false;
@@ -2049,183 +2091,14 @@
       window.searchQuery = "";
       window.restaurantMenuSearchQuery = "";
 
-      // إعادة محاولة تحميل المطاعم تلقائياً إذا فشل أول اتصال بـ Firestore.
-      // لا يتم عمل Reload للصفحة ولا يتأثر Auto Reload أو باقي البيانات.
-      window.restaurantsInitialSnapshotReceived = false;
-      let restaurantRetryTimer = null;
-      let restaurantRetryDelay = 1000;
-
-      // مؤقت انتظار ظهور المطاعم.
-      // يبدأ عند فتح التطبيق، ويختفي فور وصول مطعم واحد على الأقل.
-      // عند وصوله إلى صفر يصبح زر إعادة التحميل متاحاً للمستخدم.
-      let restaurantsLoadingCountdown = 30;
-      let restaurantsLoadingCountdownInterval = null;
-
-      function updateRestaurantsLoadingRecoveryUI() {
-        const timerEl = document.getElementById("restaurants-loading-timer");
-        const refreshBtn = document.getElementById("restaurants-refresh-btn");
-
-        if (timerEl) {
-          timerEl.textContent = Math.max(0, restaurantsLoadingCountdown);
-        }
-
-        if (refreshBtn) {
-          const ready = restaurantsLoadingCountdown <= 0;
-          refreshBtn.disabled = !ready;
-
-          refreshBtn.classList.toggle("opacity-50", !ready);
-          refreshBtn.classList.toggle("cursor-not-allowed", !ready);
-          refreshBtn.classList.toggle("cursor-pointer", ready);
-          refreshBtn.classList.toggle("shadow-md", !ready);
-          refreshBtn.classList.toggle("shadow-lg", ready);
-        }
-      }
-
-      function stopRestaurantsLoadingRecoveryTimer() {
-        if (restaurantsLoadingCountdownInterval) {
-          clearInterval(restaurantsLoadingCountdownInterval);
-          restaurantsLoadingCountdownInterval = null;
-        }
-      }
-
-      function startRestaurantsLoadingRecoveryTimer() {
-        stopRestaurantsLoadingRecoveryTimer();
-
-        restaurantsLoadingCountdown = 30;
-        updateRestaurantsLoadingRecoveryUI();
-
-        restaurantsLoadingCountdownInterval = setInterval(() => {
-          restaurantsLoadingCountdown -= 1;
-
-          if (restaurantsLoadingCountdown <= 0) {
-            restaurantsLoadingCountdown = 0;
-            stopRestaurantsLoadingRecoveryTimer();
-          }
-
-          updateRestaurantsLoadingRecoveryUI();
-        }, 1000);
-      }
-
-      function stopRestaurantsLoadingRecovery() {
-        stopRestaurantsLoadingRecoveryTimer();
-
-        const loadingEl = document.getElementById(
-          "restaurants-loading-recovery"
-        );
-        if (loadingEl) {
-          loadingEl.remove();
-        }
-      }
-
-      window.refreshRestaurantsAfterLoadingTimeout = function () {
-        if (restaurantsLoadingCountdown > 0) return;
-
-        stopRestaurantsLoadingRecoveryTimer();
-
-        // Reload عادي فقط، بدون مسح localStorage أو بيانات العميل.
-        // الـAuto Reload الموجود أعلى الملف لن يدخل في Loop لأن sessionStorage
-        // يحتفظ بعلامة الـReload السابقة أثناء جلسة التطبيق.
-        window.location.reload();
-      };
-
-      function subscribeRestaurantsListener() {
-        if (restaurantRetryTimer) {
-          clearTimeout(restaurantRetryTimer);
-          restaurantRetryTimer = null;
-        }
-
-        onSnapshot(
-          window.colRef,
-          { includeMetadataChanges: true },
-          (snapshot) => {
-            // لا نعتبر الـ snapshot القادم من الكاش تحميلًا نهائيًا؛
-            // لأن الكاش قد يكون فارغًا لحظيًا بينما بيانات السيرفر موجودة.
-            const isFromCache = snapshot.metadata?.fromCache === true;
-
-            if (!isFromCache) {
-              window.restaurantsInitialSnapshotReceived = true;
-              restaurantRetryDelay = 1000;
-            }
-
-            window.restaurantsData = [];
-            let restaurantSnapshotIndex = 0;
-            snapshot.forEach((docSnap) => {
-              window.restaurantsData.push({
-                id: docSnap.id,
-                ...docSnap.data(),
-                __restaurantSnapshotIndex: restaurantSnapshotIndex++,
-              });
-            });
-
-            // بمجرد وصول مطعم واحد على الأقل، نخفي شاشة الانتظار والمؤقت.
-            if (window.restaurantsData.length > 0) {
-              stopRestaurantsLoadingRecovery();
-            }
-
-            renderRestaurantsList();
-            populateMerchantDropdown();
-
-            // تحديث قائمة الوجبات داخل لوحة التحكم أيضاً عند أي تغيير يصل من Firebase
-            if (window.currentMerchantRestaurantId) {
-              const currentMerchantRest = window.restaurantsData.find(
-                (r) => r.id === window.currentMerchantRestaurantId
-              );
-              if (currentMerchantRest) {
-                const merchantSelect = document.getElementById(
-                  "restaurant-select-dropdown"
-                );
-                if (merchantSelect) {
-                  merchantSelect.value = window.currentMerchantRestaurantId;
-                }
-
-                const editName = document.getElementById("edit-restaurant-name");
-                const editImage = document.getElementById(
-                  "edit-restaurant-image"
-                );
-                const editDisplayOrder = document.getElementById(
-                  "edit-restaurant-display-order"
-                );
-                if (editName) editName.value = currentMerchantRest.name || "";
-                if (editImage) editImage.value = currentMerchantRest.image || "";
-                if (editDisplayOrder) {
-                  editDisplayOrder.value =
-                    currentMerchantRest.displayOrder != null
-                      ? currentMerchantRest.displayOrder
-                      : "";
-                }
-
-                updateRestaurantOpenStatusButtons(
-                  currentMerchantRest.isClosed === true
-                );
-                renderMerchantCurrentMenuList(currentMerchantRest);
-              }
-            }
-
-            if (window.currentRestaurantId) {
-              renderMenuForRestaurant(window.currentRestaurantId);
-            }
-          },
-          (error) => {
-            console.error("[Firebase Restaurants] listener error:", error);
-
-            // إذا فشل الاتصال، أعد إنشاء الـ listener بعد تأخير قصير.
-            // التأخير يزيد تدريجياً حتى لا نضغط على Firestore أو الشبكة.
-            if (!window.restaurantsInitialSnapshotReceived) {
-              const delay = restaurantRetryDelay;
-              restaurantRetryDelay = Math.min(15000, restaurantRetryDelay * 2);
-              restaurantRetryTimer = setTimeout(() => {
-                restaurantRetryTimer = null;
-                subscribeRestaurantsListener();
-              }, delay);
-            }
-          }
-        );
-      }
-
       window.initApp = function () {
-        startRestaurantsLoadingRecoveryTimer();
-        subscribeRestaurantsListener();
+        loadRestaurantsDataLocally();
+        window.restaurantsData.forEach(syncRestaurantCategories);
 
+        renderRestaurantsList();
+        populateMerchantDropdown();
+
+        // Firebase listener الوحيد في المشروع: orders.
         onSnapshot(window.ordersRef, (snapshot) => {
           window.allOrders = [];
           snapshot.forEach((docSnap) => {
@@ -2261,46 +2134,7 @@
         if (!container) return;
 
         if (window.restaurantsData.length === 0) {
-          // طالما لم تظهر أي مطاعم، نستمر في عرض شاشة التحميل + المؤقت.
-          // هذا يسمح للعميل باستخدام إعادة التحميل اليدوية بعد 30 ثانية.
-          container.innerHTML = `
-            <div
-              id="restaurants-loading-recovery"
-              class="restaurants-loading-recovery text-center py-7 text-gray-400 text-xs bg-white rounded-2xl p-5 border border-gray-100 shadow-sm"
-            >
-              <div class="restaurants-loading-spinner mb-4"></div>
-              <div class="font-extrabold text-sm text-brand-black">
-                جاري تحميل المطاعم...
-              </div>
-              <div class="text-[11px] mt-1 text-gray-400">
-                وصّلها BM بتجهزلك الدنيا 😉
-              </div>
-
-              <button
-                id="restaurants-refresh-btn"
-                type="button"
-                onclick="refreshRestaurantsAfterLoadingTimeout()"
-                disabled
-                class="mt-5 w-full bg-brand-black text-brand-yellow font-extrabold py-3 px-4 rounded-2xl text-sm shadow-md opacity-50 cursor-not-allowed transition"
-              >
-                اضغط هنا في حال عدم ظهور المطاعم
-              </button>
-
-              <div class="mt-4 text-gray-400 text-[11px] font-semibold">
-                يمكنك إعادة التحميل إذا لم تظهر المطاعم بعد انتهاء المؤقت
-              </div>
-              <div
-                id="restaurants-loading-timer"
-                class="restaurants-loading-timer mt-2 text-brand-black"
-              >
-                ${Math.max(0, restaurantsLoadingCountdown)}
-              </div>
-              <div class="text-[10px] text-gray-400 mt-1">
-                ثانية
-              </div>
-            </div>
-          `;
-          updateRestaurantsLoadingRecoveryUI();
+          container.innerHTML = `<div class="text-center py-6 text-gray-400 text-xs bg-white rounded-2xl p-4">لا توجد مطاعم متاحة حالياً.</div>`;
           return;
         }
 
@@ -3042,14 +2876,16 @@
         localStorage.setItem("waslha_device_id", deviceId);
 
         try {
-          await addDoc(window.reviewsRef, {
+          const reviews = JSON.parse(localStorage.getItem(LOCAL_REVIEWS_KEY) || "[]");
+          reviews.push({
+            id: "review_" + Date.now() + Math.random().toString(36).substring(2, 6),
             restaurantId: restId,
             rating: window.currentRating,
-            comment: comment,
-            deviceId: deviceId,
-            createdAt: serverTimestamp(),
+            comment,
+            deviceId,
+            createdAt: Date.now(),
           });
-
+          localStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(reviews));
           localStorage.setItem(`rated_${restId}`, "true");
           showRatingSuccessModal();
           checkIfAlreadyRated(restId);
@@ -3058,7 +2894,7 @@
           console.error(err);
           alert("حدث خطأ أثناء إرسال التقييم.");
         }
-      };
+      };;
 
       window.checkIfAlreadyRated = function (restId) {
         const rated = localStorage.getItem(`rated_${restId}`);
@@ -3185,44 +3021,38 @@
       };
 
       window.loadReviewsForRestaurant = function (restId) {
-        onSnapshot(window.reviewsRef, (snapshot) => {
-          let totalScore = 0;
-          let count = 0;
-          let reviewsArr = [];
+        let allReviews = [];
+        try {
+          allReviews = JSON.parse(localStorage.getItem(LOCAL_REVIEWS_KEY) || "[]");
+        } catch (_) {
+          allReviews = [];
+        }
 
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            if (data.restaurantId === restId) {
-              totalScore += Number(data.rating || 0);
-              count++;
-              reviewsArr.push(data);
-            }
-          });
+        const reviewsArr = allReviews
+          .filter((review) => review.restaurantId === restId)
+          .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 
-          const avgNum = document.getElementById("avg-rating-num");
-          const countNum = document.getElementById("total-reviews-count");
+        const totalScore = reviewsArr.reduce(
+          (sum, review) => sum + Number(review.rating || 0),
+          0
+        );
+        const count = reviewsArr.length;
+        const avgNum = document.getElementById("avg-rating-num");
+        const countNum = document.getElementById("total-reviews-count");
 
-          if (count > 0) {
-            let avg = (totalScore / count).toFixed(1);
-            if (avgNum) avgNum.textContent = `★ ${avg}`;
-            if (countNum) countNum.textContent = `(${count} تقييم)`;
-          } else {
-            if (avgNum) avgNum.textContent = "لم يتم التقييم";
-            if (countNum) countNum.textContent = "(0 تقييم)";
-          }
+        if (count > 0) {
+          if (avgNum) avgNum.textContent = `★ ${(totalScore / count).toFixed(1)}`;
+          if (countNum) countNum.textContent = `(${count} تقييم)`;
+        } else {
+          if (avgNum) avgNum.textContent = "لم يتم التقييم";
+          if (countNum) countNum.textContent = "(0 تقييم)";
+        }
 
-          reviewsArr.sort(
-            (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
-          );
-
-          if (window.currentRestaurantId === restId) {
-            window.currentRestaurantReviews = reviewsArr;
-            if (window.reviewsVisible) {
-              window.renderVisibleReviews();
-            }
-          }
-        });
-      };
+        window.currentRestaurantReviews = reviewsArr;
+        if (window.currentRestaurantId === restId && window.reviewsVisible) {
+          window.renderVisibleReviews();
+        }
+      };;
 
       // ==================== MERCHANT MODE & LOGIC ==================== //
 
@@ -3269,30 +3099,19 @@
 
       window.loadMerchantCredentialsFromCloud = async function () {
         try {
-          const snap = await getDoc(doc(db, "settings", "admin_credentials"));
-          if (snap.exists()) {
-            const data = snap.data();
+          const saved = localStorage.getItem(LOCAL_MERCHANT_CREDENTIALS_KEY);
+          if (saved) {
+            const data = JSON.parse(saved);
             window.merchantCredentialsCache = {
               username: data.username || DEFAULT_MERCHANT_USERNAME,
               password: data.password || DEFAULT_MERCHANT_PASSWORD,
             };
-          } else {
-            await setDoc(
-              doc(db, "settings", "admin_credentials"),
-              {
-                username: DEFAULT_MERCHANT_USERNAME,
-                password: DEFAULT_MERCHANT_PASSWORD,
-                sessionVersion: Date.now(),
-              },
-              { merge: true }
-            );
           }
-          window.merchantCredentialsLoaded = true;
         } catch (err) {
-          console.error(err);
-          window.merchantCredentialsLoaded = true;
+          console.warn("Local merchant credentials restore skipped:", err);
         }
-      };
+        window.merchantCredentialsLoaded = true;
+      };;
 
       window.attemptLogin = async function () {
         const user = document.getElementById("login-username").value.trim();
@@ -3348,66 +3167,32 @@
       };
 
       window.saveMerchantCredentials = async function () {
-        const username = document
-          .getElementById("settings-username")
-          .value.trim();
-        const password = document
-          .getElementById("settings-password")
-          .value.trim();
+        const username = document.getElementById("settings-username").value.trim();
+        const password = document.getElementById("settings-password").value.trim();
         if (!username || !password) {
           alert("يرجى إدخال اسم مستخدم وكلمة سر.");
           return;
         }
         if (username === SETTINGS_USERNAME && password === SETTINGS_PASSWORD) {
-          alert(
-            "بيانات دخول لوحة التحكم يجب أن تكون مختلفة عن بيانات دخول الإعدادات."
-          );
+          alert("بيانات دخول لوحة التحكم يجب أن تكون مختلفة عن بيانات دخول الإعدادات.");
           return;
         }
         try {
-          const newSessionVersion = Date.now();
-          await setDoc(
-            doc(db, "settings", "admin_credentials"),
-            {
-              username,
-              password,
-              sessionVersion: newSessionVersion,
-            },
-            { merge: true }
+          localStorage.setItem(
+            LOCAL_MERCHANT_CREDENTIALS_KEY,
+            JSON.stringify({ username, password })
           );
           window.merchantCredentialsCache = { username, password };
-          window.adminSessionVersion = newSessionVersion;
-          alert(
-            "تم تغيير بيانات دخول لوحة التحكم. سيتم إخراج جميع جلسات الإدارة المفتوحة الآن."
-          );
+          window.merchantCredentialsLoaded = true;
+          alert("تم تغيير بيانات دخول لوحة التحكم.");
           logoutMerchant();
         } catch (err) {
           console.error(err);
           alert("حدث خطأ أثناء حفظ بيانات الدخول.");
         }
-      };
+      };;
 
-      // مراقبة تغييرات بيانات الإدارة لإخراج جميع الجلسات المفتوحة فوراً.
-      onSnapshot(doc(db, "settings", "admin_credentials"), (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data();
-        const oldVersion = window.adminSessionVersion;
-        window.merchantCredentialsCache = {
-          username: data.username || DEFAULT_MERCHANT_USERNAME,
-          password: data.password || DEFAULT_MERCHANT_PASSWORD,
-        };
-        window.merchantCredentialsLoaded = true;
-        window.adminSessionVersion = data.sessionVersion || null;
-        if (
-          oldVersion !== undefined &&
-          oldVersion !== null &&
-          window.adminSessionVersion !== oldVersion &&
-          sessionStorage.getItem("merchant_logged_in") === "true"
-        ) {
-          alert("تم تغيير بيانات دخول لوحة التحكم. سيتم تسجيل خروجك الآن.");
-          logoutMerchant();
-        }
-      });
+      // لا توجد مراقبة لإعدادات الإدارة في Firebase؛ Firebase مخصص للأوردرات فقط.
 
       window.openCustomerWhatsApp = function () {
         const whatsappUrl = "https://wa.me/message/SPJ6UWWNWNG6I1";
@@ -3587,18 +3372,16 @@
           alert("يرجى اختيار مطعم أولاً.");
           return;
         }
-
-        try {
-          const restDocRef = doc(db, "restaurants", restId);
-          await updateDoc(restDocRef, { isClosed: !isOpen });
-          alert(
-            isOpen ? "تم فتح المطعم بنجاح للعملاء." : "تم إغلاق المطعم بنجاح."
-          );
-        } catch (err) {
-          console.error(err);
-          alert("حدث خطأ أثناء تحديث حالة المطعم.");
-        }
-      };
+        const rest = window.restaurantsData.find((r) => r.id === restId);
+        if (!rest) return;
+        rest.isClosed = !isOpen;
+        syncRestaurantCategories(rest);
+        saveRestaurantsDataLocally();
+        renderRestaurantsList();
+        populateMerchantDropdown();
+        updateRestaurantOpenStatusButtons(rest.isClosed === true);
+        showAppToast(isOpen ? "تم فتح المطعم بنجاح للعملاء." : "تم إغلاق المطعم بنجاح.");
+      };;
 
       window.updateRestaurantOpenStatusButtons = function (isClosed) {
         const openBtn = document.getElementById("rest-status-open-btn");
@@ -3707,26 +3490,19 @@
       ) {
         const normalizedOrderedItems = orderedItems.map((item, index) => {
           const { __menuSnapshotIndex, ...cleanItem } = item;
-          return {
-            ...cleanItem,
-            displayOrder: index + 1,
-          };
+          return { ...cleanItem, displayOrder: index + 1 };
         });
-
         const normalizedUnrankedItems = unrankedItems.map((item) => {
           const { __menuSnapshotIndex, ...cleanItem } = item;
-          return {
-            ...cleanItem,
-            displayOrder: null,
-          };
+          return { ...cleanItem, displayOrder: null };
         });
+        const finalMenu = [...normalizedOrderedItems, ...normalizedUnrankedItems];
 
-        const finalMenu = [
-          ...normalizedOrderedItems,
-          ...normalizedUnrankedItems,
-        ];
-
-        await updateDoc(doc(db, "restaurants", restId), { menu: finalMenu });
+        const rest = window.restaurantsData.find((r) => r.id === restId);
+        if (!rest) throw new Error("Restaurant not found");
+        rest.menu = finalMenu;
+        syncRestaurantCategories(rest);
+        saveRestaurantsDataLocally();
         return finalMenu;
       }
 
@@ -3796,32 +3572,15 @@
         orderedRestaurants,
         unrankedRestaurants = []
       ) {
-        const updates = [];
-
         orderedRestaurants.forEach((rest, index) => {
-          const newOrder = index + 1;
-          if (Number(rest.displayOrder) !== newOrder) {
-            updates.push(
-              updateDoc(doc(db, "restaurants", rest.id), {
-                displayOrder: newOrder,
-              })
-            );
-          }
+          rest.displayOrder = index + 1;
         });
-
         unrankedRestaurants.forEach((rest) => {
-          if (rest.displayOrder != null) {
-            updates.push(
-              updateDoc(doc(db, "restaurants", rest.id), {
-                displayOrder: null,
-              })
-            );
-          }
+          rest.displayOrder = null;
         });
-
-        if (updates.length > 0) {
-          await Promise.all(updates);
-        }
+        window.restaurantsData = [...orderedRestaurants, ...unrankedRestaurants];
+        window.restaurantsData.forEach(syncRestaurantCategories);
+        saveRestaurantsDataLocally();
       }
 
       window.saveNewRestaurant = async function () {
@@ -3868,9 +3627,7 @@
             displayOrder !== "" &&
             (!Number.isInteger(parsedDisplayOrder) || parsedDisplayOrder < 1)
           ) {
-            alert(
-              "ترتيب ظهور المطعم يجب أن يكون رقماً صحيحاً أكبر من أو يساوي 1."
-            );
+            alert("ترتيب ظهور المطعم يجب أن يكون رقماً صحيحاً أكبر من أو يساوي 1.");
             return;
           }
 
@@ -3882,41 +3639,32 @@
             existingRestaurants.filter((rest) => !restaurantHasDisplayOrder(rest))
           );
 
-          let newRestaurantDisplayOrder = null;
-
-          if (parsedDisplayOrder !== null) {
-            const targetIndex = Math.min(
-              Math.max(parsedDisplayOrder, 1),
-              rankedRestaurants.length + 1
-            ) - 1;
-
-            newRestaurantDisplayOrder = targetIndex + 1;
-          }
-
-          const newRestaurantRef = await addDoc(window.colRef, {
-            name: name,
-            image: imageUrl,
+          const newRestaurant = {
+            id: "restaurant_" + Date.now(),
+            name,
+            image: imageUrl || defaultRestaurantImage,
             isClosed: false,
             menu: [],
-            displayOrder: newRestaurantDisplayOrder,
+            categories: [],
+            displayOrder: null,
             createdAt: Date.now(),
-          });
+          };
 
           if (parsedDisplayOrder !== null) {
-            const targetIndex = newRestaurantDisplayOrder - 1;
-
-            rankedRestaurants.splice(targetIndex, 0, {
-              id: newRestaurantRef.id,
-              displayOrder: newRestaurantDisplayOrder,
-            });
-
-            await saveRestaurantDisplayOrder(rankedRestaurants);
+            const targetIndex =
+              Math.min(Math.max(parsedDisplayOrder, 1), rankedRestaurants.length + 1) - 1;
+            rankedRestaurants.splice(targetIndex, 0, newRestaurant);
+            rankedRestaurants.forEach((r, index) => (r.displayOrder = index + 1));
+            window.restaurantsData = [...rankedRestaurants, ...unrankedRestaurants];
           } else {
-            await saveRestaurantDisplayOrder(
-              rankedRestaurants,
-              unrankedRestaurants
-            );
+            unrankedRestaurants.push(newRestaurant);
+            window.restaurantsData = [...rankedRestaurants, ...unrankedRestaurants];
           }
+
+          syncRestaurantCategories(newRestaurant);
+          saveRestaurantsDataLocally();
+          renderRestaurantsList();
+          populateMerchantDropdown();
 
           showActionSuccessModal(
             `تم إضافة المطعم "${name}" بنجاح.`,
@@ -3926,30 +3674,24 @@
           document.getElementById("new-restaurant-image").value = "";
           document.getElementById("new-restaurant-display-order").value = "";
           document.getElementById("new-restaurant-file").value = "";
-          document
-            .getElementById("new-restaurant-fields")
-            .classList.add("hidden");
+          document.getElementById("new-restaurant-fields").classList.add("hidden");
         } catch (err) {
           console.error(err);
           alert("حدث خطأ أثناء إضافة المطعم.");
         }
-      };
+      };;
 
 
       window.updateCurrentRestaurant = async function () {
         const restId = window.currentMerchantRestaurantId;
         if (!restId) return;
 
-        const name = document
-          .getElementById("edit-restaurant-name")
-          .value.trim();
-        let imageUrl = document
-          .getElementById("edit-restaurant-image")
-          .value.trim();
-        const displayOrder = document
-          .getElementById("edit-restaurant-display-order")
-          .value.trim();
+        const name = document.getElementById("edit-restaurant-name").value.trim();
+        let imageUrl = document.getElementById("edit-restaurant-image").value.trim();
+        const displayOrder = document.getElementById("edit-restaurant-display-order").value.trim();
         const fileInput = document.getElementById("edit-restaurant-file");
+        const rest = window.restaurantsData.find((r) => r.id === restId);
+        if (!rest) return;
 
         if (!name) {
           alert("اسم المطعم مطلوب.");
@@ -3958,89 +3700,49 @@
 
         const parsedDisplayOrder =
           displayOrder !== "" ? parseInt(displayOrder, 10) : null;
-
         if (
           displayOrder !== "" &&
           (!Number.isInteger(parsedDisplayOrder) || parsedDisplayOrder < 1)
         ) {
-          alert(
-            "ترتيب ظهور المطعم يجب أن يكون رقماً صحيحاً أكبر من أو يساوي 1."
-          );
+          alert("ترتيب ظهور المطعم يجب أن يكون رقماً صحيحاً أكبر من أو يساوي 1.");
           return;
         }
 
-        const currentRestaurant = window.restaurantsData.find(
-          (r) => r.id === restId
-        );
-        if (!currentRestaurant) return;
+        const applyUpdate = (newImage) => {
+          rest.name = name;
+          rest.image = newImage || rest.image || defaultRestaurantImage;
 
-        const existingRestaurants = window.restaurantsData.filter(
-          (r) => r.id !== restId
-        );
-        const rankedRestaurants = sortRestaurantsForDisplay(
-          existingRestaurants.filter(restaurantHasDisplayOrder)
-        );
-        const unrankedRestaurants = sortRestaurantsForDisplay(
-          existingRestaurants.filter((rest) => !restaurantHasDisplayOrder(rest))
-        );
+          const others = window.restaurantsData.filter((r) => r.id !== restId);
+          const ranked = sortRestaurantsForDisplay(others.filter(restaurantHasDisplayOrder));
+          const unranked = sortRestaurantsForDisplay(others.filter((r) => !restaurantHasDisplayOrder(r)));
 
-        if (parsedDisplayOrder !== null) {
-          const targetIndex = Math.min(
-            Math.max(parsedDisplayOrder, 1),
-            rankedRestaurants.length + 1
-          ) - 1;
+          if (parsedDisplayOrder !== null) {
+            const targetIndex =
+              Math.min(Math.max(parsedDisplayOrder, 1), ranked.length + 1) - 1;
+            ranked.splice(targetIndex, 0, rest);
+            ranked.forEach((r, index) => (r.displayOrder = index + 1));
+            window.restaurantsData = [...ranked, ...unranked];
+          } else {
+            rest.displayOrder = null;
+            unranked.push(rest);
+            window.restaurantsData = [...ranked, ...unranked];
+          }
 
-          rankedRestaurants.splice(targetIndex, 0, {
-            ...currentRestaurant,
-            displayOrder: parsedDisplayOrder,
-          });
-        } else {
-          unrankedRestaurants.push({
-            ...currentRestaurant,
-            displayOrder: null,
-          });
-          unrankedRestaurants.sort(
-            (a, b) => restaurantCreationTime(a) - restaurantCreationTime(b)
-          );
-        }
-
-        const restRef = doc(db, "restaurants", restId);
+          syncRestaurantCategories(rest);
+          saveRestaurantsDataLocally();
+          renderRestaurantsList();
+          populateMerchantDropdown();
+          updateRestaurantOpenStatusButtons(rest.isClosed === true);
+          renderMerchantCurrentMenuList(rest);
+          showAppToast("تم تعديل المطعم بنجاح.");
+        };
 
         if (fileInput.files && fileInput.files[0]) {
-          compressAndConvertImage(fileInput.files[0], async (compressedUrl) => {
-            try {
-              await updateDoc(restRef, {
-                name: name,
-                image: compressedUrl,
-                displayOrder: parsedDisplayOrder,
-              });
-
-              await saveRestaurantDisplayOrder(
-                rankedRestaurants,
-                unrankedRestaurants
-              );
-
-              showAppToast("تم تعديل المطعم بنجاح.");
-            } catch (err) {
-              console.error(err);
-              alert("حدث خطأ أثناء تعديل المطعم.");
-            }
-          });
+          compressAndConvertImage(fileInput.files[0], applyUpdate);
         } else {
-          await updateDoc(restRef, {
-            name: name,
-            image: imageUrl,
-            displayOrder: parsedDisplayOrder,
-          });
-
-          await saveRestaurantDisplayOrder(
-            rankedRestaurants,
-            unrankedRestaurants
-          );
-
-          showAppToast("تم تعديل المطعم بنجاح.");
+          applyUpdate(imageUrl);
         }
-      };
+      };;
 
       window.deleteCurrentRestaurant = async function () {
         const restId = window.currentMerchantRestaurantId;
@@ -4051,45 +3753,17 @@
             "هل أنت متأكد من حذف هذا المطعم نهائياً بكل أكلاته؟"
           )
         ) {
-          try {
-            const remainingRestaurants = window.restaurantsData.filter(
-              (r) => r.id !== restId
-            );
-            const rankedRestaurants = sortRestaurantsForDisplay(
-              remainingRestaurants.filter(restaurantHasDisplayOrder)
-            );
-            const unrankedRestaurants = sortRestaurantsForDisplay(
-              remainingRestaurants.filter(
-                (rest) => !restaurantHasDisplayOrder(rest)
-              )
-            );
-
-            await deleteDoc(doc(db, "restaurants", restId));
-            await saveRestaurantDisplayOrder(
-              rankedRestaurants,
-              unrankedRestaurants
-            );
-            showAppToast("تم حذف المطعم بنجاح.");
-            document.getElementById("restaurant-select-dropdown").value = "";
-            window.currentMerchantRestaurantId = null;
-            if (window.merchantReviewsUnsubscribe) {
-              window.merchantReviewsUnsubscribe();
-              window.merchantReviewsUnsubscribe = null;
-            }
-            window.merchantReviewsVisible = false;
-            window.currentMerchantReviews = [];
-            document
-              .getElementById("edit-restaurant-box")
-              .classList.add("hidden");
-            document
-              .getElementById("restaurant-dependent-sections")
-              .classList.add("hidden");
-          } catch (err) {
-            console.error(err);
-            alert("حدث خطأ أثناء الحذف.");
-          }
+          window.restaurantsData = window.restaurantsData.filter((r) => r.id !== restId);
+          saveRestaurantsDataLocally();
+          renderRestaurantsList();
+          populateMerchantDropdown();
+          showAppToast("تم حذف المطعم بنجاح.");
+          document.getElementById("restaurant-select-dropdown").value = "";
+          window.currentMerchantRestaurantId = null;
+          document.getElementById("edit-restaurant-box").classList.add("hidden");
+          document.getElementById("restaurant-dependent-sections").classList.add("hidden");
         }
-      };
+      };;
 
       window.addNewMenuItem = async function () {
         const restId = window.currentMerchantRestaurantId;
@@ -4097,9 +3771,7 @@
 
         const name = document.getElementById("new-item-name").value.trim();
         const desc = document.getElementById("new-item-desc").value.trim();
-        const displayOrder = document
-          .getElementById("new-item-display-order")
-          .value.trim();
+        const displayOrder = document.getElementById("new-item-display-order").value.trim();
 
         if (!name) {
           alert("يرجى إدخال اسم الوجبة.");
@@ -4113,30 +3785,22 @@
           displayOrder !== "" &&
           (!Number.isInteger(parsedDisplayOrder) || parsedDisplayOrder < 1)
         ) {
-          alert(
-            "ترتيب ظهور الوجبة يجب أن يكون رقماً صحيحاً أكبر من أو يساوي 1."
-          );
+          alert("ترتيب ظهور الوجبة يجب أن يكون رقماً صحيحاً أكبر من أو يساوي 1.");
           return;
         }
 
         let options = [];
         for (let i = 1; i <= 5; i++) {
-          let label = document.getElementById(`opt-label-${i}`).value.trim();
-          let priceInput = document.getElementById(`opt-price-${i}`);
-          let price = priceInput ? priceInput.value.trim() : "";
-          if (label && price) {
-            options.push({ label: label, price: parseFloat(price) });
-          }
+          const label = document.getElementById(`opt-label-${i}`).value.trim();
+          const priceInput = document.getElementById(`opt-price-${i}`);
+          const price = priceInput ? priceInput.value.trim() : "";
+          if (label && price) options.push({ label, price: parseFloat(price) });
         }
 
         if (options.length === 0) {
-          const firstPrice = document
-            .getElementById("opt-price-1")
-            .value.trim();
+          const firstPrice = document.getElementById("opt-price-1").value.trim();
           if (!firstPrice) {
-            alert(
-              "يرجى إدخال السعر في خانة السعر الأول، أو إضافة اسم وسعر لأي حجم."
-            );
+            alert("يرجى إدخال السعر في خانة السعر الأول، أو إضافة اسم وسعر لأي حجم.");
             return;
           }
           options.push({ label: "وان سايز", price: parseFloat(firstPrice) });
@@ -4144,9 +3808,10 @@
 
         const newItem = {
           id: "item_" + Date.now() + Math.random().toString(36).substring(2, 5),
-          name: name,
-          desc: desc,
-          options: options,
+          name,
+          desc,
+          image: "",
+          options,
           displayOrder: null,
           createdAt: Date.now(),
         };
@@ -4164,31 +3829,21 @@
 
         if (parsedDisplayOrder !== null) {
           const targetIndex =
-            Math.min(
-              Math.max(parsedDisplayOrder, 1),
-              rankedItems.length + 1
-            ) - 1;
-
+            Math.min(Math.max(parsedDisplayOrder, 1), rankedItems.length + 1) - 1;
           rankedItems.splice(targetIndex, 0, {
             ...newItem,
             displayOrder: targetIndex + 1,
           });
         } else {
           unrankedItems.push(newItem);
-          unrankedItems.sort(
-            (a, b) => menuItemCreationTime(a) - menuItemCreationTime(b)
-          );
+          unrankedItems.sort((a, b) => menuItemCreationTime(a) - menuItemCreationTime(b));
         }
 
         try {
-          const menu = await saveMenuItemDisplayOrder(
-            restId,
-            rankedItems,
-            unrankedItems
-          );
-
+          const menu = await saveMenuItemDisplayOrder(restId, rankedItems, unrankedItems);
           rest.menu = menu;
           renderMerchantCurrentMenuList(rest);
+          if (window.currentRestaurantId === restId) renderMenuForRestaurant(restId);
 
           showActionSuccessModal(
             `تم إضافة الوجبة "${name}" إلى منيو المطعم بنجاح.`,
@@ -4206,7 +3861,7 @@
           console.error(err);
           alert("حدث خطأ أثناء إضافة الوجبة.");
         }
-      };
+      };;
 
       window.escapeMerchantReviewHtml = function (value) {
         return String(value ?? "")
@@ -4303,46 +3958,17 @@
 
       window.loadMerchantReviews = function (restId) {
         if (!restId) return;
-
-        if (window.merchantReviewsUnsubscribe) {
-          window.merchantReviewsUnsubscribe();
-          window.merchantReviewsUnsubscribe = null;
+        try {
+          const allReviews = JSON.parse(localStorage.getItem(LOCAL_REVIEWS_KEY) || "[]");
+          window.currentMerchantReviews = allReviews
+            .filter((review) => review.restaurantId === restId)
+            .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+        } catch (_) {
+          window.currentMerchantReviews = [];
         }
-
-        window.merchantReviewsUnsubscribe = onSnapshot(
-          window.reviewsRef,
-          (snapshot) => {
-            if (window.currentMerchantRestaurantId !== restId) return;
-
-            const reviews = [];
-            snapshot.forEach((docSnap) => {
-              const data = docSnap.data();
-              if (data.restaurantId === restId) {
-                reviews.push({
-                  id: docSnap.id,
-                  ...data,
-                });
-              }
-            });
-
-            reviews.sort(
-              (a, b) =>
-                (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
-            );
-
-            window.currentMerchantReviews = reviews;
-            window.renderMerchantReviews();
-          },
-          (err) => {
-            console.error(err);
-            const container = document.getElementById("merchant-reviews-list");
-            if (container) {
-              container.innerHTML =
-                '<p class="text-red-500 text-center py-4">حدث خطأ أثناء جلب التقييمات.</p>';
-            }
-          }
-        );
-      };
+        window.merchantReviewsUnsubscribe = null;
+        window.renderMerchantReviews();
+      };;
 
       window.toggleMerchantReviews = function () {
         const restId = window.currentMerchantRestaurantId;
@@ -4402,9 +4028,7 @@
         const reviewId = document.getElementById("edit-review-id").value;
         if (!restId || !reviewId) return;
 
-        const comment = document
-          .getElementById("edit-review-comment")
-          .value.trim();
+        const comment = document.getElementById("edit-review-comment").value.trim();
         const rating = Number(window.currentEditingReviewRating) || 0;
 
         if (rating < 1 || rating > 5) {
@@ -4412,26 +4036,26 @@
           return;
         }
 
-        const review = (window.currentMerchantReviews || []).find(
-          (item) => item.id === reviewId
-        );
-        if (!review || review.restaurantId !== restId) {
-          alert("التقييم المحدد غير تابع للمطعم الحالي.");
-          return;
-        }
-
         try {
-          await updateDoc(doc(db, "reviews", reviewId), {
-            rating: rating,
-            comment: comment,
-          });
+          const reviews = JSON.parse(localStorage.getItem(LOCAL_REVIEWS_KEY) || "[]");
+          const idx = reviews.findIndex(
+            (review) => review.id === reviewId && review.restaurantId === restId
+          );
+          if (idx < 0) {
+            alert("التقييم المحدد غير تابع للمطعم الحالي.");
+            return;
+          }
+          reviews[idx].rating = rating;
+          reviews[idx].comment = comment;
+          localStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(reviews));
+          window.loadMerchantReviews(restId);
           window.closeEditReviewModal();
           showAppToast("تم تعديل التقييم بنجاح.");
         } catch (err) {
           console.error(err);
           alert("حدث خطأ أثناء تعديل التقييم.");
         }
-      };
+      };;
 
       window.deleteMerchantReview = async function (reviewId) {
         const restId = window.currentMerchantRestaurantId;
@@ -4445,20 +4069,23 @@
           return;
         }
 
-        if (
-          !(await showDeleteConfirmation("هل أنت متأكد من حذف هذا التقييم؟"))
-        ) {
+        if (!(await showDeleteConfirmation("هل أنت متأكد من حذف هذا التقييم؟"))) {
           return;
         }
 
         try {
-          await deleteDoc(doc(db, "reviews", reviewId));
+          const reviews = JSON.parse(localStorage.getItem(LOCAL_REVIEWS_KEY) || "[]");
+          localStorage.setItem(
+            LOCAL_REVIEWS_KEY,
+            JSON.stringify(reviews.filter((item) => item.id !== reviewId))
+          );
+          window.loadMerchantReviews(restId);
           showAppToast("تم حذف التقييم بنجاح.");
         } catch (err) {
           console.error(err);
           alert("حدث خطأ أثناء حذف التقييم.");
         }
-      };
+      };;
 
       window.renderMerchantCurrentMenuList = function (rest) {
         const container = document.getElementById("merchant-current-menu-list");
@@ -4574,15 +4201,9 @@
         const rest = window.restaurantsData.find((r) => r.id === restId);
         if (!rest) return;
 
-        const name = document
-          .getElementById("edit-item-name-input")
-          .value.trim();
-        const desc = document
-          .getElementById("edit-item-desc-input")
-          .value.trim();
-        const displayOrder = document
-          .getElementById("edit-item-display-order")
-          .value.trim();
+        const name = document.getElementById("edit-item-name-input").value.trim();
+        const desc = document.getElementById("edit-item-desc-input").value.trim();
+        const displayOrder = document.getElementById("edit-item-display-order").value.trim();
 
         if (!name) {
           alert("اسم الوجبة مطلوب.");
@@ -4591,34 +4212,23 @@
 
         const parsedDisplayOrder =
           displayOrder !== "" ? parseInt(displayOrder, 10) : null;
-
         if (
           displayOrder !== "" &&
           (!Number.isInteger(parsedDisplayOrder) || parsedDisplayOrder < 1)
         ) {
-          alert(
-            "ترتيب ظهور الوجبة يجب أن يكون رقماً صحيحاً أكبر من أو يساوي 1."
-          );
+          alert("ترتيب ظهور الوجبة يجب أن يكون رقماً صحيحاً أكبر من أو يساوي 1.");
           return;
         }
 
         let options = [];
         for (let i = 1; i <= 5; i++) {
-          let label = document
-            .getElementById(`edit-opt-label-${i}`)
-            .value.trim();
-          let price = document
-            .getElementById(`edit-opt-price-${i}`)
-            .value.trim();
-          if (label && price) {
-            options.push({ label: label, price: parseFloat(price) });
-          }
+          const label = document.getElementById(`edit-opt-label-${i}`).value.trim();
+          const price = document.getElementById(`edit-opt-price-${i}`).value.trim();
+          if (label && price) options.push({ label, price: parseFloat(price) });
         }
 
         if (options.length === 0) {
-          const firstPrice = document
-            .getElementById("edit-opt-price-1")
-            .value.trim();
+          const firstPrice = document.getElementById("edit-opt-price-1").value.trim();
           if (!firstPrice) {
             alert("يجب وضع سعر واحد على الأقل.");
             return;
@@ -4631,9 +4241,9 @@
 
         const editedItem = {
           ...currentItem,
-          name: name,
-          desc: desc,
-          options: options,
+          name,
+          desc,
+          options,
           displayOrder: parsedDisplayOrder,
         };
 
@@ -4649,44 +4259,28 @@
 
         if (parsedDisplayOrder !== null) {
           const targetIndex =
-            Math.min(
-              Math.max(parsedDisplayOrder, 1),
-              rankedItems.length + 1
-            ) - 1;
-
+            Math.min(Math.max(parsedDisplayOrder, 1), rankedItems.length + 1) - 1;
           rankedItems.splice(targetIndex, 0, {
             ...editedItem,
             displayOrder: parsedDisplayOrder,
           });
         } else {
-          unrankedItems.push({
-            ...editedItem,
-            displayOrder: null,
-          });
-          unrankedItems.sort(
-            (a, b) => menuItemCreationTime(a) - menuItemCreationTime(b)
-          );
+          unrankedItems.push({ ...editedItem, displayOrder: null });
+          unrankedItems.sort((a, b) => menuItemCreationTime(a) - menuItemCreationTime(b));
         }
 
         try {
-          const menu = await saveMenuItemDisplayOrder(
-            restId,
-            rankedItems,
-            unrankedItems
-          );
-
+          const menu = await saveMenuItemDisplayOrder(restId, rankedItems, unrankedItems);
           rest.menu = menu;
           renderMerchantCurrentMenuList(rest);
-          if (window.currentRestaurantId === restId) {
-            renderMenuForRestaurant(restId);
-          }
+          if (window.currentRestaurantId === restId) renderMenuForRestaurant(restId);
           showAppToast("تم تعديل الوجبة بنجاح.");
           closeEditItemModal();
         } catch (err) {
           console.error(err);
           alert("حدث خطأ أثناء تعديل الوجبة.");
         }
-      };
+      };;
 
       window.filterOrders = function (status, btnElement) {
         window.currentOrderStatusFilter = status;
