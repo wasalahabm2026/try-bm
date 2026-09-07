@@ -1502,18 +1502,20 @@
       }
 
       window.registerWaslhaNotifications = async function () {
+        let stage = "بداية التفعيل";
+
         try {
           if (
             !("Notification" in window) ||
             !("serviceWorker" in navigator) ||
             !("PushManager" in window)
           ) {
-            console.warn("Web Push is not supported in this browser.");
-            return false;
+            throw new Error(
+              "المتصفح لا يدعم إشعارات Web Push المطلوبة."
+            );
           }
 
-          // This function is also called from a real button click.
-          // On mobile Chrome this is the reliable way to open the permission prompt.
+          stage = "فحص إذن الإشعارات";
           let permission = Notification.permission;
 
           if (permission === "default") {
@@ -1521,13 +1523,16 @@
           }
 
           if (permission !== "granted") {
-            console.warn("Notification permission was not granted.");
-            return false;
+            throw new Error(
+              "إذن الإشعارات الحالي: " + permission
+            );
           }
 
+          stage = "تسجيل Service Worker";
           const registration =
             await navigator.serviceWorker.register("/firebase-messaging-sw.js");
 
+          stage = "إنشاء اشتراك الإشعارات";
           let subscription = await registration.pushManager.getSubscription();
 
           if (!subscription) {
@@ -1539,6 +1544,7 @@
             });
           }
 
+          stage = "تسجيل الجهاز في خادم الإشعارات";
           const response = await fetch(
             WASLHA_NOTIFICATION_WORKER + "/subscribe",
             {
@@ -1550,19 +1556,34 @@
             }
           );
 
+          const responseText = await response.text();
+
           if (!response.ok) {
-            const text = await response.text();
             throw new Error(
-              "Worker subscribe failed: " + response.status + " " + text
+              "الخادم رد برقم " +
+                response.status +
+                ": " +
+                responseText
             );
           }
 
           console.log("Waslha Web Push device registered successfully.");
           window.updateWaslhaNotificationButton(true);
+          window.waslhaNotificationLastError = "";
           return true;
         } catch (error) {
+          const message =
+            error && error.message
+              ? error.message
+              : String(error);
+
+          window.waslhaNotificationLastError =
+            "المرحلة: " + stage + "
+التفاصيل: " + message;
+
           console.error(
             "Failed to register Waslha Web Push notifications:",
+            stage,
             error
           );
           return false;
@@ -1607,7 +1628,9 @@
             if (!ok) {
               window.updateWaslhaNotificationButton(false);
               alert(
-                "لم يتم تفعيل الإشعارات. تأكدي أن إشعارات Chrome مسموحة لهذا الموقع."
+                "لم يتم تفعيل الإشعارات.\n\n" +
+                (window.waslhaNotificationLastError ||
+                  "حدث خطأ غير معروف.")
               );
             }
           });
